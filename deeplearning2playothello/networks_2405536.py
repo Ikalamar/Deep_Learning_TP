@@ -295,5 +295,331 @@ class LSTMs(nn.Module):
         perf_rep=classification_report(all_targets,all_predicts,zero_division=1,digits=4,output_dict=True)
         
         return perf_rep
+
+
+class CNN(nn.Module):
+    def __init__(self, conf):
+        """
+        Convolutional Neural Network (CNN) model for the Othello game.
+        Optimized architecture for 8x8 board state prediction.
+
+        Parameters:
+        - conf (dict): Configuration dictionary containing model parameters.
+        """
+        super(CNN, self).__init__()
+        
+        self.board_size = conf["board_size"]
+        self.path_save = conf["path_save"] + "_CNN/"
+        self.earlyStopping = conf["earlyStopping"]
+        self.len_input_seq = conf["len_inpout_seq"]
+        
+        # Optimized CNN architecture for Othello
+        # Input: (batch_size, 1, 8, 8) - single board or (batch_size, seq_len, 8, 8)
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1)
+        self.bn1 = nn.BatchNorm2d(32)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
+        self.bn2 = nn.BatchNorm2d(64)
+        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, stride=1, padding=1)
+        self.bn3 = nn.BatchNorm2d(128)
+        
+        # Residual-like connection for deeper learning
+        self.conv4 = nn.Conv2d(128, 64, kernel_size=3, stride=1, padding=1)
+        self.bn4 = nn.BatchNorm2d(64)
+        
+        # Global average pooling + fully connected layers
+        self.fc1 = nn.Linear(64 * 8 * 8, 256)
+        self.dropout1 = nn.Dropout(p=0.3)
+        self.fc2 = nn.Linear(256, 128)
+        self.dropout2 = nn.Dropout(p=0.2)
+        self.fc3 = nn.Linear(128, self.board_size * self.board_size)
+        
+        self.relu = nn.ReLU()
+        
+    def forward(self, seq):
+        """
+        Forward pass of the CNN.
+
+        Parameters:
+        - seq (torch.Tensor): Board state(s) as input.
+
+        Returns:
+        - torch.Tensor: Output probabilities after applying softmax.
+        """
+        # Handle different input shapes (work with torch tensors, avoid np.squeeze)
+        if len(seq.shape) == 4:
+            # Batch of sequences: (batch_size, seq_len, 8, 8)
+            # Take only the last board state in sequence
+            seq = seq[:, -1, :, :].unsqueeze(1)  # (batch_size, 1, 8, 8)
+        elif len(seq.shape) == 3:
+            # Single sequence: (seq_len, 8, 8)
+            seq = seq[-1, :, :].unsqueeze(0).unsqueeze(0)  # (1, 1, 8, 8)
+        elif len(seq.shape) == 2:
+            # Single board: (8, 8)
+            seq = seq.unsqueeze(0).unsqueeze(0)  # (1, 1, 8, 8)
+        
+        # Convolutional layers with batch normalization and ReLU activation
+        x = self.relu(self.bn1(self.conv1(seq)))
+        x = self.relu(self.bn2(self.conv2(x)))
+        x = self.relu(self.bn3(self.conv3(x)))
+        x = self.relu(self.bn4(self.conv4(x)))
+        
+        # Flatten and fully connected layers
+        x = x.view(x.size(0), -1)  # Flatten
+        x = self.relu(self.fc1(x))
+        x = self.dropout1(x)
+        x = self.relu(self.fc2(x))
+        x = self.dropout2(x)
+        x = self.fc3(x)
+        
+        return F.softmax(x, dim=-1)
+    
+    def train_all(self, train, dev, num_epoch, device, optimizer):
+        """
+        Train the CNN model with early stopping.
+        """
+        if not os.path.exists(f"{self.path_save}"):
+            os.mkdir(f"{self.path_save}")
+        
+        best_dev = 0.0
+        notchange = 0
+        train_acc_list = []
+        dev_acc_list = []
+        torch.autograd.set_detect_anomaly(True)
+        init_time = time.time()
+        
+        for epoch in range(1, num_epoch + 1):
+            start_time = time.time()
+            loss = 0.0
+            nb_batch = 0
+            loss_batch = 0
+            
+            self.train()
+            for batch, labels, _ in tqdm(train):
+                outputs = self(batch.float().to(device))
+                loss = loss_fnc(outputs, labels.clone().detach().float().to(device))
+                loss.backward()
+                optimizer.step()
+                optimizer.zero_grad()
+                nb_batch += 1
+                loss_batch += loss.item()
+            
+            print("epoch : " + str(epoch) + "/" + str(num_epoch) + ' - loss = ' + 
+                  str(loss_batch / nb_batch))
+            last_training = time.time() - start_time
+            
+            self.eval()
+            
+            train_clas_rep = self.evalulate(train, device)
+            acc_train = train_clas_rep["weighted avg"]["recall"]
+            train_acc_list.append(acc_train)
+            
+            dev_clas_rep = self.evalulate(dev, device)
+            acc_dev = dev_clas_rep["weighted avg"]["recall"]
+            dev_acc_list.append(acc_dev)
+            
+            last_prediction = time.time() - last_training - start_time
+            
+            print(f"Accuracy Train:{round(100*acc_train, 2)}%, Dev:{round(100*acc_dev, 2)}% ;",
+                  f"Time:{round(time.time()-init_time)}",
+                  f"(last_train:{round(last_training)}sec, last_pred:{round(last_prediction)}sec)")
+            
+            # Save model for every epoch
+            torch.save(self, self.path_save + '/model_' + str(epoch) + '.pt')
+            
+            if acc_dev > best_dev or best_dev == 0.0:
+                notchange = 0
+                best_dev = acc_dev
+                best_epoch = epoch
+            else:
+                notchange += 1
+                if notchange > self.earlyStopping:
+                    break
+            
+            print("*"*15, f"The best score on DEV {best_epoch} :{round(100*best_dev, 3)}%")
+        
+        self = torch.load(self.path_save + '/model_' + str(best_epoch) + '.pt', weights_only=False)
+        self.eval()
+        _clas_rep = self.evalulate(dev, device)
+        print(f"Recalculing the best DEV: WAcc : {100*_clas_rep['weighted avg']['recall']}%")
+        
+        return best_epoch
+    
+    def evalulate(self, test_loader, device):
+        """
+        Evaluate the CNN model on test data.
+        """
+        all_predicts = []
+        all_targets = []
+        
+        for data, target, _ in tqdm(test_loader):
+            output = self(data.float().to(device))
+            predicted = output.argmax(dim=-1).cpu().detach().numpy()
+            target = target.argmax(dim=-1).numpy()
+            for i in range(len(predicted)):
+                all_predicts.append(predicted[i])
+                all_targets.append(target[i])
+        
+        perf_rep = classification_report(all_targets,
+                                        all_predicts,
+                                        zero_division=1,
+                                        digits=4,
+                                        output_dict=True)
+        
+        return perf_rep
+
+
+class CNNBasic(nn.Module):
+    def __init__(self, conf):
+        """
+        Basic Convolutional Neural Network (CNN) model for the Othello game.
+        Simple architecture without optimizations (no batch norm, no dropout).
+
+        Parameters:
+        - conf (dict): Configuration dictionary containing model parameters.
+        """
+        super(CNNBasic, self).__init__()
+        
+        self.board_size = conf["board_size"]
+        self.path_save = conf["path_save"] + "_CNN/"
+        self.earlyStopping = conf["earlyStopping"]
+        self.len_input_seq = conf["len_inpout_seq"]
+        
+        # Basic CNN architecture for Othello
+        # Input: (batch_size, 1, 8, 8) - single board
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
+        
+        # Fully connected layers (simple)
+        self.fc1 = nn.Linear(64 * 8 * 8, 128)
+        self.fc2 = nn.Linear(128, self.board_size * self.board_size)
+        
+        self.relu = nn.ReLU()
+        
+    def forward(self, seq):
+        """
+        Forward pass of the basic CNN.
+
+        Parameters:
+        - seq (torch.Tensor): Board state(s) as input.
+
+        Returns:
+        - torch.Tensor: Output probabilities after applying softmax.
+        """
+        # Handle different input shapes (work with torch tensors, avoid np.squeeze)
+        if len(seq.shape) == 4:
+            # Batch of sequences: (batch_size, seq_len, 8, 8)
+            # Take only the last board state in sequence
+            seq = seq[:, -1, :, :].unsqueeze(1)  # (batch_size, 1, 8, 8)
+        elif len(seq.shape) == 3:
+            # Single sequence: (seq_len, 8, 8)
+            seq = seq[-1, :, :].unsqueeze(0).unsqueeze(0)  # (1, 1, 8, 8)
+        elif len(seq.shape) == 2:
+            # Single board: (8, 8)
+            seq = seq.unsqueeze(0).unsqueeze(0)  # (1, 1, 8, 8)
+        
+        # Convolutional layers with ReLU activation (no batch norm, no dropout)
+        x = self.relu(self.conv1(seq))
+        x = self.relu(self.conv2(x))
+        
+        # Flatten and fully connected layers
+        x = x.view(x.size(0), -1)  # Flatten
+        x = self.relu(self.fc1(x))
+        x = self.fc2(x)
+        
+        return F.softmax(x, dim=-1)
+    
+    def train_all(self, train, dev, num_epoch, device, optimizer):
+        """
+        Train the basic CNN model with early stopping.
+        """
+        if not os.path.exists(f"{self.path_save}"):
+            os.mkdir(f"{self.path_save}")
+        
+        best_dev = 0.0
+        notchange = 0
+        train_acc_list = []
+        dev_acc_list = []
+        torch.autograd.set_detect_anomaly(True)
+        init_time = time.time()
+        
+        for epoch in range(1, num_epoch + 1):
+            start_time = time.time()
+            loss = 0.0
+            nb_batch = 0
+            loss_batch = 0
+            
+            self.train()
+            for batch, labels, _ in tqdm(train):
+                outputs = self(batch.float().to(device))
+                loss = loss_fnc(outputs, labels.clone().detach().float().to(device))
+                loss.backward()
+                optimizer.step()
+                optimizer.zero_grad()
+                nb_batch += 1
+                loss_batch += loss.item()
+            
+            print("epoch : " + str(epoch) + "/" + str(num_epoch) + ' - loss = ' + 
+                  str(loss_batch / nb_batch))
+            last_training = time.time() - start_time
+            
+            self.eval()
+            
+            train_clas_rep = self.evalulate(train, device)
+            acc_train = train_clas_rep["weighted avg"]["recall"]
+            train_acc_list.append(acc_train)
+            
+            dev_clas_rep = self.evalulate(dev, device)
+            acc_dev = dev_clas_rep["weighted avg"]["recall"]
+            dev_acc_list.append(acc_dev)
+            
+            last_prediction = time.time() - last_training - start_time
+            
+            print(f"Accuracy Train:{round(100*acc_train, 2)}%, Dev:{round(100*acc_dev, 2)}% ;",
+                  f"Time:{round(time.time()-init_time)}",
+                  f"(last_train:{round(last_training)}sec, last_pred:{round(last_prediction)}sec)")
+            
+            # Save model for every epoch
+            torch.save(self, self.path_save + '/model_' + str(epoch) + '.pt')
+            
+            if acc_dev > best_dev or best_dev == 0.0:
+                notchange = 0
+                best_dev = acc_dev
+                best_epoch = epoch
+            else:
+                notchange += 1
+                if notchange > self.earlyStopping:
+                    break
+            
+            print("*"*15, f"The best score on DEV {best_epoch} :{round(100*best_dev, 3)}%")
+        
+        self = torch.load(self.path_save + '/model_' + str(best_epoch) + '.pt', weights_only=False)
+        self.eval()
+        _clas_rep = self.evalulate(dev, device)
+        print(f"Recalculing the best DEV: WAcc : {100*_clas_rep['weighted avg']['recall']}%")
+        
+        return best_epoch
+    
+    def evalulate(self, test_loader, device):
+        """
+        Evaluate the basic CNN model on test data.
+        """
+        all_predicts = []
+        all_targets = []
+        
+        for data, target, _ in tqdm(test_loader):
+            output = self(data.float().to(device))
+            predicted = output.argmax(dim=-1).cpu().detach().numpy()
+            target = target.argmax(dim=-1).numpy()
+            for i in range(len(predicted)):
+                all_predicts.append(predicted[i])
+                all_targets.append(target[i])
+        
+        perf_rep = classification_report(all_targets,
+                                        all_predicts,
+                                        zero_division=1,
+                                        digits=4,
+                                        output_dict=True)
+        
+        return perf_rep
             
 

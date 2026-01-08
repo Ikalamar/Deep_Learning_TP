@@ -1,0 +1,27 @@
+Log generated: 2026-01-08 22:01:36
+
+save_models_LSTM:
+  best_file: model_43.pt
+  best_epoch: 43
+  dev_recall: 22.1367%
+
+save_models_LSTM_DO_0-2_Bidirect_LSTM:
+  best_file: model_46.pt
+  best_epoch: 46
+  dev_recall: 23.9867%
+
+save_models_MLP:
+  best_file: model_50.pt
+  best_epoch: 50
+  dev_recall: 15.33%
+
+save_models_MLP_Hidden_512_256_DO_0-2_MLP:
+  best_file: model_50.pt
+  best_epoch: 50
+  dev_recall: 15.0267%
+
+save_models_MLP_Hidden_512_DO_0-2_MLP:
+  best_file: model_50.pt
+  best_epoch: 50
+  dev_recall: 14.8833%
+

@@ -76,19 +76,16 @@ class CustomDatasetMany(Dataset):
         self.game_files_name=list_files#[s + ".h5" for s in list_files]       
         
         if self.load_data_once4all:
-            self.samples=np.zeros((len(self.game_files_name)*30,self.len_samples,8,8), dtype=int)
-            self.outputs=np.zeros((len(self.game_files_name)*30,8*8), dtype=int)
+            self.samples=np.zeros((len(self.game_files_name)*60,self.len_samples,8,8), dtype=int)
+            self.outputs=np.zeros((len(self.game_files_name)*60,8*8), dtype=int)
             idx=0
             for gm_idx,gm_name in tqdm(enumerate(self.game_files_name)):
 
                 game_log=load_game_log(self.path_dataset+gm_name)
-                last_board_state=copy.copy(game_log[0][-1])
-                is_black_winner=isBlackWinner(game_log[1][-1],last_board_state)
-                for sm_idx in range(30):
-                    if is_black_winner:
-                        end_move=2*sm_idx
-                    else:
-                        end_move=2*sm_idx+1
+                # Use all moves in the game, not just winner's moves
+                num_moves=len(game_log[0])
+                for end_move in range(1, num_moves):
+                    is_black_move=(end_move % 2 == 1)  # Black plays on odd moves
                         
                     if end_move+1 >= self.len_samples:
                         features=game_log[0][end_move-self.len_samples+1:
@@ -103,7 +100,7 @@ class CustomDatasetMany(Dataset):
                             features.append(game_log[0][i])
 
                     #if black is the current player the board should be multiplay by -1    
-                    if is_black_winner:       
+                    if is_black_move:       
                         features=np.array([features],dtype=int)*-1
                     else:
                         features=np.array([features],dtype=int)    
@@ -114,22 +111,19 @@ class CustomDatasetMany(Dataset):
         else:
         
             #creat a list of samples as SampleManager objcets
-            self.samples=np.empty(len(self.game_files_name)*30, dtype=object)
+            self.samples=np.empty(len(self.game_files_name)*60, dtype=object)
             idx=0
             for gm_idx,gm_name in tqdm(enumerate(self.game_files_name)):
                 game_log=load_game_log(self.path_dataset+gm_name)
-                last_board_state=copy.copy(game_log[0][-1])
-                is_black_winner=isBlackWinner(game_log[1][-1],last_board_state)
-                for sm_idx in range(30):
-                    if is_black_winner:
-                        end_move=2*sm_idx
-                    else:
-                        end_move=2*sm_idx+1
+                # Use all moves in the game, not just winner's moves
+                num_moves=len(game_log[0])
+                for end_move in range(1, num_moves):
+                    is_black_move=(end_move % 2 == 1)  # Black plays on odd moves
                     self.samples[idx]=SampleManager(gm_name,
                                                     self.path_dataset,
                                                     end_move,
                                                     self.len_samples,
-                                                    is_black_winner)
+                                                    is_black_move)
                     idx+=1
         
         #np.random.shuffle(self.samples)
@@ -197,18 +191,15 @@ class CustomDatasetOne(Dataset):
         self.game_files_name=list_files#[s + ".h5" for s in list_files]       
         
         if self.load_data_once4all:
-            self.samples=np.zeros((len(self.game_files_name)*30,self.len_samples,8,8), dtype=int)
-            self.outputs=np.zeros((len(self.game_files_name)*30,8*8), dtype=int)
+            self.samples=np.zeros((len(self.game_files_name)*60,self.len_samples,8,8), dtype=int)
+            self.outputs=np.zeros((len(self.game_files_name)*60,8*8), dtype=int)
             idx=0
             for gm_idx,gm_name in tqdm(enumerate(self.game_files_name)):
                 game_log=load_game_log(self.path_dataset+gm_name)
-                last_board_state=copy.copy(game_log[0][-1])
-                is_black_winner=isBlackWinner(game_log[1][-1],last_board_state)
-                for sm_idx in range(30):
-                    if is_black_winner:
-                        end_move=2*sm_idx
-                    else:
-                        end_move=2*sm_idx+1
+                # Use all moves in the game, not just winner's moves
+                num_moves=len(game_log[0])
+                for end_move in range(1, num_moves):
+                    is_black_move=(end_move % 2 == 1)  # Black plays on odd moves
                         
                     if end_move+1 >= self.len_samples:
                         features=game_log[0][end_move-self.len_samples+1:
@@ -223,7 +214,7 @@ class CustomDatasetOne(Dataset):
                             features.append(game_log[0][i])
 
                     #if black is the current player the board should be multiplay by -1    
-                    if is_black_winner:       
+                    if is_black_move:       
                         features=np.array([features],dtype=int)*-1
                     else:
                         features=np.array([features],dtype=int)    
@@ -234,22 +225,19 @@ class CustomDatasetOne(Dataset):
         else:
         
             #creat a list of samples as SampleManager objcets
-            self.samples=np.empty(len(self.game_files_name)*30, dtype=object)
+            self.samples=np.empty(len(self.game_files_name)*60, dtype=object)
             idx=0
             for gm_idx,gm_name in tqdm(enumerate(self.game_files_name)):
                 game_log=load_game_log(self.path_dataset+gm_name)
-                last_board_state=copy.copy(game_log[0][-1])
-                is_black_winner=isBlackWinner(game_log[1][-1],last_board_state)
-                for sm_idx in range(30):
-                    if is_black_winner:
-                        end_move=2*sm_idx
-                    else:
-                        end_move=2*sm_idx+1
+                # Use all moves in the game, not just winner's moves
+                num_moves=len(game_log[0])
+                for end_move in range(1, num_moves):
+                    is_black_move=(end_move % 2 == 1)  # Black plays on odd moves
                     self.samples[idx]=SampleManager(gm_name,
                                                     self.path_dataset,
                                                     end_move,
                                                     self.len_samples,
-                                                    is_black_winner)
+                                                    is_black_move)
                     idx+=1
         
         print(f"Number of samples : {len(self.samples)}")
