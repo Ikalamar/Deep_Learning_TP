@@ -1,0 +1,3 @@
+Log generated: 2026-01-07 13:48:18
+Many2One (LSTM) best_file: model_44.pt, epoch: 44, dev_recall: 21.4933%
+One2One (MLP) best_file: model_50.pt, epoch: 50, dev_recall: 14.65%

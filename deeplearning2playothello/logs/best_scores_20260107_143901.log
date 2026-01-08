@@ -1,0 +1,17 @@
+Log generated: 2026-01-07 14:39:01
+
+save_models_LSTM_default:
+  best_file: model_49.pt
+  best_epoch: 49
+  dev_recall: 22.29%
+
+save_models_LSTM_DO_0-2:
+  best_file: model_49.pt
+  best_epoch: 49
+  dev_recall: 21.25%
+
+save_models_MLP_default:
+  best_file: model_47.pt
+  best_epoch: 47
+  dev_recall: 15.3433%
+
