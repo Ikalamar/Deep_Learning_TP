@@ -3,7 +3,7 @@ from torch.utils.data import DataLoader
 
 from data import CustomDatasetOne
 from utile import BOARD_SIZE
-from networks_2405536 import CNN
+from networks_2405536 import CNNBasic
 
 
 if torch.cuda.is_available():
@@ -16,17 +16,18 @@ print('Running on ' + str(device))
 len_samples = 1
 
 # ============================================================================
-# TRAINING CONFIGURATION
+# TRAINING CONFIGURATION - OPTIMIZED HYPERPARAMETERS
 # ============================================================================
 dataset_conf = {}  
 dataset_conf["filelist"] = "train.txt"
 dataset_conf["len_samples"] = len_samples
 dataset_conf["path_dataset"] = "../dataset/"
+# Reduced batch size for better gradient updates and more frequent weight updates
 dataset_conf['batch_size'] = 128
 
 print("Loading Training Dataset ... ")
 ds_train = CustomDatasetOne(dataset_conf, load_data_once4all=True)
-trainSet = DataLoader(ds_train, batch_size=dataset_conf['batch_size'])
+trainSet = DataLoader(ds_train, batch_size=dataset_conf['batch_size'], shuffle=True)
 
 # ============================================================================
 # DEVELOPMENT CONFIGURATION
@@ -42,34 +43,22 @@ ds_dev = CustomDatasetOne(dataset_conf, load_data_once4all=True)
 devSet = DataLoader(ds_dev, batch_size=dataset_conf['batch_size'])
 
 # ============================================================================
-# CNN MODEL CONFIGURATION - OPTIMIZED ARCHITECTURE
+# CNN MODEL CONFIGURATION - OPTIMIZED HYPERPARAMETERS
 # ============================================================================
 conf = {}
 conf["board_size"] = BOARD_SIZE
-conf["path_save"] = "save_models_CNN_optimized"
-conf['epoch'] = 50
-conf["earlyStopping"] = 20
+conf["path_save"] = "save_models_CNN_optimized_v2"
+conf['epoch'] = 20
+conf["earlyStopping"] = 25
 conf["len_inpout_seq"] = len_samples
 conf["CNN_conf"] = {}
-conf["CNN_conf"]["num_conv_layers"] = 4
-conf["CNN_conf"]["initial_filters"] = 32
-conf["CNN_conf"]["dropout_rate"] = 0.2
-
-print("=" * 60)
-print("CNN OPTIMIZED ARCHITECTURE")
-print("=" * 60)
-print(f"Board Size: {BOARD_SIZE}x{BOARD_SIZE}")
-print(f"Convolutional Layers: 4")
-print(f"Initial Filters: 32 -> 64 -> 128 -> 64")
-print(f"Batch Normalization: Enabled")
-print(f"Dropout Rates: 0.3 and 0.2")
-print(f"Optimization: Adam with lr=0.001")
-print(f"Early Stopping Patience: {conf['earlyStopping']}")
-print("=" * 60)
 
 # Initialize model
-model = CNN(conf).to(device)
-opt = torch.optim.Adam(model.parameters(), lr=0.001)
+model = CNNBasic(conf).to(device)
+
+# Optimized Adam with weight decay for L2 regularization
+# Weight decay helps prevent overfitting
+opt = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-5)
 
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -79,7 +68,7 @@ print(f"Number of trainable parameters: {n}")
 print("=" * 60)
 
 # Train the model
-print("\nStarting training...")
+print("\nStarting training with optimized hyperparameters...")
 best_epoch = model.train_all(trainSet,
                              devSet,
                              conf['epoch'],
@@ -108,3 +97,5 @@ print("=" * 60)
 print(f"Best model saved at epoch: {best_epoch}")
 print(f"Model path: {conf['path_save']}_CNN/model_{best_epoch}.pt")
 print("=" * 60)
+print("\n" + "=" * 60)
+

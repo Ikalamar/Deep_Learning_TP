@@ -41,7 +41,7 @@ devSet = DataLoader(ds_dev, batch_size=dataset_conf['batch_size'])
 
 conf={}
 conf["board_size"]=BOARD_SIZE
-conf["path_save"]="save_models"
+conf["path_save"]="save_models_LSTM_Hidden_256_dropout_0-2_wdecay_0-0001"
 conf['epoch']=50
 conf["earlyStopping"]=25
 conf["len_inpout_seq"]=len_samples

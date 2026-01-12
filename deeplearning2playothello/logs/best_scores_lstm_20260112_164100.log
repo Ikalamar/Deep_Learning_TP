@@ -1,0 +1,12 @@
+Log generated: 2026-01-12 16:41:00
+
+save_models_LSTM:
+  best_file: model_50.pt
+  best_epoch: 50
+  dev_recall: 26.065%
+
+save_models_LSTM_DO_0-2_Bidirect_LSTM:
+  best_file: model_50.pt
+  best_epoch: 50
+  dev_recall: 29.6017%
+

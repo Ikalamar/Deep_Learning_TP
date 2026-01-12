@@ -47,23 +47,10 @@ devSet = DataLoader(ds_dev, batch_size=dataset_conf['batch_size'])
 conf = {}
 conf["board_size"] = BOARD_SIZE
 conf["path_save"] = "save_models_CNN_basic"
-conf['epoch'] = 50
+conf['epoch'] = 20
 conf["earlyStopping"] = 20
 conf["len_inpout_seq"] = len_samples
 conf["CNN_conf"] = {}
-
-print("=" * 60)
-print("CNN BASIC ARCHITECTURE (NO OPTIMIZATION)")
-print("=" * 60)
-print(f"Board Size: {BOARD_SIZE}x{BOARD_SIZE}")
-print(f"Convolutional Layers: 2")
-print(f"Initial Filters: 32 -> 64")
-print(f"Batch Normalization: Disabled")
-print(f"Dropout: Disabled")
-print(f"Activation: ReLU")
-print(f"Optimization: Adam with lr=0.001")
-print(f"Early Stopping Patience: {conf['earlyStopping']}")
-print("=" * 60)
 
 # Initialize model
 model = CNNBasic(conf).to(device)
