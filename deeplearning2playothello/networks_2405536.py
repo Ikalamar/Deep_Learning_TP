@@ -621,5 +621,189 @@ class CNNBasic(nn.Module):
                                         output_dict=True)
         
         return perf_rep
+
+
+class CNNLSTM(nn.Module):
+    def __init__(self, conf):
+        """
+        Hybrid CNN-LSTM model for the Othello game.
+        Combines CNN for spatial feature extraction with LSTM for temporal sequence modeling.
+
+        Parameters:
+        - conf (dict): Configuration dictionary containing model parameters.
+        """
+        super(CNNLSTM, self).__init__()
+        
+        self.board_size = conf["board_size"]
+        self.path_save = conf["path_save"] + "_CNN_LSTM/"
+        self.earlyStopping = conf["earlyStopping"]
+        self.len_input_seq = conf["len_inpout_seq"]
+        
+        # CNN component for spatial feature extraction
+        # Input: (batch_size, seq_len, 8, 8)
+        self.conv1 = nn.Conv2d(1, 32, kernel_size=3, stride=1, padding=1)
+        self.bn1 = nn.BatchNorm2d(32)
+        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
+        self.bn2 = nn.BatchNorm2d(64)
+        
+        # CNN output: (batch_size, 64, 8, 8) -> flattened: (batch_size, 64*8*8=4096)
+        cnn_output_dim = 64 * 8 * 8  # 4096
+        
+        # LSTM component for temporal sequence modeling
+        # Input: (batch_size, seq_len, cnn_output_dim)
+        self.lstm_hidden_dim = 256
+        self.lstm = nn.LSTM(cnn_output_dim, self.lstm_hidden_dim, 
+                           num_layers=2, batch_first=True, dropout=0.2)
+        
+        # Fully connected layers for final prediction
+        self.fc1 = nn.Linear(self.lstm_hidden_dim, 128)
+        self.dropout = nn.Dropout(p=0.2)
+        self.fc2 = nn.Linear(128, self.board_size * self.board_size)
+        
+        self.relu = nn.ReLU()
+        
+    def forward(self, seq):
+        """
+        Forward pass of the CNN-LSTM model.
+
+        Parameters:
+        - seq (torch.Tensor): Sequence of board states as input.
+                              Shape: (batch_size, seq_len, 8, 8) or (seq_len, 8, 8) or (8, 8)
+
+        Returns:
+        - torch.Tensor: Output probabilities after applying softmax.
+        """
+        # Handle different input shapes
+        if len(seq.shape) == 4:
+            # Batch of sequences: (batch_size, seq_len, 8, 8)
+            batch_size, seq_len, h, w = seq.shape
+        elif len(seq.shape) == 3:
+            # Single sequence: (seq_len, 8, 8)
+            seq = seq.unsqueeze(0)  # Add batch dimension: (1, seq_len, 8, 8)
+            batch_size, seq_len, h, w = seq.shape
+        elif len(seq.shape) == 2:
+            # Single board: (8, 8)
+            seq = seq.unsqueeze(0).unsqueeze(0)  # (1, 1, 8, 8)
+            batch_size, seq_len, h, w = 1, 1, 8, 8
+        
+        # Reshape for CNN: (batch_size*seq_len, 1, 8, 8)
+        seq_reshaped = seq.reshape(batch_size * seq_len, 1, h, w)
+        
+        # CNN forward pass
+        x = self.relu(self.bn1(self.conv1(seq_reshaped)))
+        x = self.relu(self.bn2(self.conv2(x)))
+        
+        # Flatten CNN output: (batch_size*seq_len, 64*8*8)
+        x = x.reshape(batch_size * seq_len, -1)
+        
+        # Reshape back for LSTM: (batch_size, seq_len, 64*8*8)
+        x = x.reshape(batch_size, seq_len, -1)
+        
+        # LSTM forward pass
+        lstm_out, (hn, cn) = self.lstm(x)
+        
+        # Use the last output from LSTM: (batch_size, lstm_hidden_dim)
+        lstm_last = lstm_out[:, -1, :]
+        
+        # Fully connected layers
+        x = self.relu(self.fc1(lstm_last))
+        x = self.dropout(x)
+        x = self.fc2(x)
+        
+        return F.softmax(x, dim=-1)
+    
+    def train_all(self, train, dev, num_epoch, device, optimizer):
+        """
+        Train the CNN-LSTM model with early stopping.
+        """
+        if not os.path.exists(f"{self.path_save}"):
+            os.mkdir(f"{self.path_save}")
+        
+        best_dev = 0.0
+        notchange = 0
+        train_acc_list = []
+        dev_acc_list = []
+        torch.autograd.set_detect_anomaly(True)
+        init_time = time.time()
+        
+        for epoch in range(1, num_epoch + 1):
+            start_time = time.time()
+            loss = 0.0
+            nb_batch = 0
+            loss_batch = 0
+            
+            self.train()
+            for batch, labels, _ in tqdm(train):
+                outputs = self(batch.float().to(device))
+                loss = loss_fnc(outputs, labels.clone().detach().float().to(device))
+                loss.backward()
+                optimizer.step()
+                optimizer.zero_grad()
+                nb_batch += 1
+                loss_batch += loss.item()
+            
+            print("epoch : " + str(epoch) + "/" + str(num_epoch) + ' - loss = ' + 
+                  str(loss_batch / nb_batch))
+            last_training = time.time() - start_time
+            
+            self.eval()
+            
+            train_clas_rep = self.evalulate(train, device)
+            acc_train = train_clas_rep["weighted avg"]["recall"]
+            train_acc_list.append(acc_train)
+            
+            dev_clas_rep = self.evalulate(dev, device)
+            acc_dev = dev_clas_rep["weighted avg"]["recall"]
+            dev_acc_list.append(acc_dev)
+            
+            last_prediction = time.time() - last_training - start_time
+            
+            print(f"Accuracy Train:{round(100*acc_train, 2)}%, Dev:{round(100*acc_dev, 2)}% ;",
+                  f"Time:{round(time.time()-init_time)}",
+                  f"(last_train:{round(last_training)}sec, last_pred:{round(last_prediction)}sec)")
+            
+            # Save model for every epoch
+            torch.save(self, self.path_save + '/model_' + str(epoch) + '.pt')
+            
+            if acc_dev > best_dev or best_dev == 0.0:
+                notchange = 0
+                best_dev = acc_dev
+                best_epoch = epoch
+            else:
+                notchange += 1
+                if notchange > self.earlyStopping:
+                    break
+            
+            print("*"*15, f"The best score on DEV {best_epoch} :{round(100*best_dev, 3)}%")
+        
+        self = torch.load(self.path_save + '/model_' + str(best_epoch) + '.pt', weights_only=False)
+        self.eval()
+        _clas_rep = self.evalulate(dev, device)
+        print(f"Recalculing the best DEV: WAcc : {100*_clas_rep['weighted avg']['recall']}%")
+        
+        return best_epoch
+    
+    def evalulate(self, test_loader, device):
+        """
+        Evaluate the CNN-LSTM model on test data.
+        """
+        all_predicts = []
+        all_targets = []
+        
+        for data, target, _ in tqdm(test_loader):
+            output = self(data.float().to(device))
+            predicted = output.argmax(dim=-1).cpu().detach().numpy()
+            target = target.argmax(dim=-1).numpy()
+            for i in range(len(predicted)):
+                all_predicts.append(predicted[i])
+                all_targets.append(target[i])
+        
+        perf_rep = classification_report(all_targets,
+                                        all_predicts,
+                                        zero_division=1,
+                                        digits=4,
+                                        output_dict=True)
+        
+        return perf_rep
             
 
