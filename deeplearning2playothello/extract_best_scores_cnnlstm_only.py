@@ -4,17 +4,17 @@ import torch
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 
-from data import CustomDatasetMany, CustomDatasetOne
-from networks_2405536 import LSTMs, MLP
+from data import CustomDatasetOne
+from networks_2405536 import CNNLSTM
 
 
 def get_device():
     return torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
 
 
-def build_dev_loader(dataset_type, batch_size=1000, len_samples=5, path_dataset="../dataset/"):
+def build_dev_loader(batch_size=256, len_samples=5, path_dataset="../dataset/"):
     """
-    Build dev loader for either 'many' (Many2One) or 'one' (One2One).
+    Build dev loader for CNN-LSTM (One2One with 5 frame sequences).
     """
     dataset_conf = {
         "filelist": "dev.txt",
@@ -22,10 +22,7 @@ def build_dev_loader(dataset_type, batch_size=1000, len_samples=5, path_dataset=
         "path_dataset": path_dataset,
         "batch_size": batch_size,
     }
-    if dataset_type == "many":
-        ds_dev = CustomDatasetMany(dataset_conf)
-    else:  # "one"
-        ds_dev = CustomDatasetOne(dataset_conf, load_data_once4all=True)
+    ds_dev = CustomDatasetOne(dataset_conf, load_data_once4all=True)
     return DataLoader(ds_dev, batch_size=batch_size)
 
 
@@ -94,38 +91,30 @@ def main():
     now = time.strftime('%Y-%m-%d %H:%M:%S')
     now_filename = time.strftime('%Y%m%d_%H%M%S')
     
-    # Scan all save_models_* directories
+    # Scan only save_models_CNN_LSTM* directories
     all_results = {}
     colors = {}
     color_list = ['blue', 'red', 'green', 'orange', 'purple', 'brown', 'pink', 'gray', 'cyan', 'magenta']
     marker_list = ['o', 's', '^', 'v', 'D', 'p', '*', 'h', 'X', '+']
     
-    for i, item in enumerate(sorted(os.listdir('.'))):
-        if item.startswith('save_models_') and os.path.isdir(item):
-            # Detect dataset type (LSTM=Many2One, CNN_LSTM=One2One, MLP=One2One)
-            if 'CNN_LSTM' in item or 'CNNLSTM' in item:
-                dataset_type = "one"  # CNN_LSTM uses One2One dataset
-                len_samples = 5
-            elif 'LSTM' in item:
-                dataset_type = "many"
-                len_samples = 5
-            else:
-                dataset_type = "one"
-                len_samples = 1
+    cnnlstm_dirs = [item for item in sorted(os.listdir('.')) 
+                    if item.startswith('save_models_') and ('CNN_LSTM' in item or 'CNNLSTM' in item) 
+                    and os.path.isdir(item)]
+    
+    for i, item in enumerate(cnnlstm_dirs):
+        try:
+            dev_loader = build_dev_loader(len_samples=5)
+            result = evaluate_models_in_dir(item, dev_loader, device)
             
-            try:
-                dev_loader = build_dev_loader(dataset_type, len_samples=len_samples)
-                result = evaluate_models_in_dir(item, dev_loader, device)
-                
-                if result:
-                    all_results[item] = result
-                    colors[item] = {
-                        'color': color_list[i % len(color_list)],
-                        'marker': marker_list[i % len(marker_list)]
-                    }
-            except Exception as e:
-                print(f"Error processing {item}: {e}")
-                continue
+            if result:
+                all_results[item] = result
+                colors[item] = {
+                    'color': color_list[i % len(color_list)],
+                    'marker': marker_list[i % len(marker_list)]
+                }
+        except Exception as e:
+            print(f"Error processing {item}: {e}")
+            continue
     
     # Write log with all results
     out_lines = [f"Log generated: {now}\n\n"]
@@ -137,13 +126,13 @@ def main():
         out_lines.append(f"  best_epoch: {result['best_epoch']}\n")
         out_lines.append(f"  dev_recall: {round(100*result['best_acc'],4)}%\n\n")
     
-    log_file = os.path.join(logs_dir, f'best_scores_{now_filename}.log')
+    log_file = os.path.join(logs_dir, f'best_scores_cnnlstm_{now_filename}.log')
     with open(log_file, 'w', encoding='utf-8') as f:
         f.writelines(out_lines)
 
     print(f'Wrote {log_file}')
 
-    # Generate graph with all models
+    # Generate graph with CNN-LSTM models only
     plt.figure(figsize=(14, 8))
     
     for model_dir in sorted(all_results.keys()):
@@ -158,11 +147,11 @@ def main():
     
     plt.xlabel('Epoch', fontsize=12)
     plt.ylabel('Accuracy (%)', fontsize=12)
-    plt.title('Model Accuracy vs Epoch (Dev Set)', fontsize=14, fontweight='bold')
+    plt.title('CNN-LSTM Models - Accuracy vs Epoch (Dev Set)', fontsize=14, fontweight='bold')
     plt.legend(fontsize=10, loc='best')
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    graph_file = os.path.join(logs_dir, f'accuracy_curves_{now_filename}.png')
+    graph_file = os.path.join(logs_dir, f'accuracy_curves_cnnlstm_{now_filename}.png')
     plt.savefig(graph_file, dpi=100)
     print(f'Wrote {graph_file}')
     plt.close()

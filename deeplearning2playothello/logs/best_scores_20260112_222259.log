@@ -1,0 +1,22 @@
+Log generated: 2026-01-12 22:22:59
+
+save_models_CNN_LSTM_optimized_CNN_LSTM:
+  best_file: model_20.pt
+  best_epoch: 20
+  dev_recall: 34.8117%
+
+save_models_CNN_optimized_CNN:
+  best_file: model_20.pt
+  best_epoch: 20
+  dev_recall: 33.0283%
+
+save_models_LSTM_DO_0-2_Bidirect_LSTM:
+  best_file: model_50.pt
+  best_epoch: 50
+  dev_recall: 29.6017%
+
+save_models_MLP:
+  best_file: model_47.pt
+  best_epoch: 47
+  dev_recall: 17.04%
+

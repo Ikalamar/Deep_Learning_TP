@@ -1,0 +1,17 @@
+Log generated: 2026-01-12 20:30:06
+
+save_models_MLP:
+  best_file: model_38.pt
+  best_epoch: 38
+  dev_recall: 16.9717%
+
+save_models_MLP_Hidden_512_256_DO_0-2_MLP:
+  best_file: model_39.pt
+  best_epoch: 39
+  dev_recall: 15.7883%
+
+save_models_MLP_Hidden_512_DO_0-2_MLP:
+  best_file: model_49.pt
+  best_epoch: 49
+  dev_recall: 16.9%
+

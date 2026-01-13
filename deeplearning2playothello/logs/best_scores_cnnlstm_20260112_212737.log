@@ -1,0 +1,7 @@
+Log generated: 2026-01-12 21:27:37
+
+save_models_CNN_LSTM_CNN_LSTM:
+  best_file: model_20.pt
+  best_epoch: 20
+  dev_recall: 33.3467%
+
